@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: release
+
+on:
+  push:
+    tags: ["v0.0.*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and validate without publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m unittest discover -s tests
+      - name: Tag must match pyproject.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(python3 -c "import re;print(re.search(r'^version = \"(.*?)\"', open('pyproject.toml').read(), re.M).group(1))")
+          test "v${VERSION}" = "${GITHUB_REF_NAME}" || {
+            echo "::error::tag ${GITHUB_REF_NAME} does not match pyproject.toml ${VERSION}"
+            exit 1
+          }
+      - name: Build
+        run: |
+          python3 -m pip install --disable-pip-version-check build
+          python3 -m build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    name: Publish to PyPI
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Mints the OIDC identity PyPI exchanges for a short-lived token, and is
+      # what makes PEP 740 attestations possible. No long-lived token exists.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          attestations: true

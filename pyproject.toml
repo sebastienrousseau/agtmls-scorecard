@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agtmls-scorecard"
+version = "0.0.1"
+description = "Score a repository against the AgtMLS rubric, and say how much of the rubric could actually be evaluated"
+readme = "README.md"
+license = "Apache-2.0 OR MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Sebastien Rousseau" }]
+keywords = ["scorecard", "quality", "supply-chain", "ci", "agtmls"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Quality Assurance",
+]
+# Dependency-free on purpose: a tool that scores supply-chain hygiene should
+# not be the reason a repository grows a dependency tree.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/sebastienrousseau/agtmls-scorecard"
+Repository = "https://github.com/sebastienrousseau/agtmls-scorecard"
+
+[project.scripts]
+agtmls-scorecard = "agtmls_scorecard.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agtmls_scorecard"]
