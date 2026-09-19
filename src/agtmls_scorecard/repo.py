@@ -11,7 +11,15 @@ from pathlib import Path
 
 #: Directories no check should read. Scoring a repository by what is in its
 #: build output would reward a dirty tree.
-IGNORED = {".git", "target", "node_modules", "__pycache__", ".venv", "dist", "build", "pkg", "pkg-node"}
+IGNORED = {
+    ".git", "target", "node_modules", "__pycache__", ".venv", "dist", "build",
+    "pkg", "pkg-node",
+    # Vendored and generated: committed, but not authored here. Judging a
+    # repository on the line length of a wasm-bindgen shim rewards nothing.
+    "vendor", "generated", "_generated",
+}
+#: Files that say they are generated, wherever they sit.
+GENERATED_MARKER = "@generated"
 
 
 class Repo:
@@ -44,8 +52,21 @@ class Repo:
         )
 
     def by_suffix(self, *suffixes: str) -> list[Path]:
+        """Authored files with these extensions.
+
+        A file carrying a generated-code marker is excluded: its author is a
+        tool, and the tool is not the thing being scored.
+        """
         wanted = {s.lower() for s in suffixes}
-        return [p for p in self.files if p.suffix.lower() in wanted]
+        out = []
+        for path in self.files:
+            if path.suffix.lower() not in wanted:
+                continue
+            head = path.read_text(encoding="utf-8", errors="replace")[:400]
+            if GENERATED_MARKER in head or "Do not edit" in head or "DO NOT EDIT" in head:
+                continue
+            out.append(path)
+        return out
 
     @functools.cached_property
     def workflows(self) -> dict[str, str]:

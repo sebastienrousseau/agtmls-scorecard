@@ -11,6 +11,9 @@ from ..repo import Repo
 
 TITLE = "Correctness & Test Depth"
 
+#: Backtick spans and string literals. Anything inside one is shown, not done.
+QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"|'[^']*'")
+
 
 def _tests_exist(repo: Repo) -> Result:
     candidates = [
@@ -48,14 +51,20 @@ def _no_silent_skips(repo: Repo) -> Result:
     patterns = (
         re.compile(r"#\[ignore\]"),
         re.compile(r"@(unittest\.)?skip\b"),
-        re.compile(r"\.skip\s*\("),
+        # `it.skip(` / `test.skip(` / `describe.skip(` -- not `args.skip(1)`,
+        # which is how you drop argv[0] and not a skipped test at all.
+        re.compile(r"\b(it|test|describe|context)\.(skip|todo)\s*\("),
         re.compile(r"\btodo!\s*\("),
     )
     linked = re.compile(r"(#\d+|issues?/\d+|reason\s*=)")
     for path in repo.by_suffix(".rs", ".py", ".mjs", ".js", ".ts"):
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         for index, line in enumerate(lines):
-            if any(p.search(line) for p in patterns) and not linked.search(line):
+            # A marker inside a string or a backtick span is being quoted --
+            # a pattern that defines skip detection, or a fixture. This check
+            # matched its own regex before the strip.
+            bare = QUOTED.sub("", line)
+            if any(p.search(bare) for p in patterns) and not linked.search(bare):
                 skips.append(f"{path.relative_to(repo.root)}:{index + 1}")
     if skips:
         return Result("1.6", "No unexplained skipped test", Status.FAIL,
