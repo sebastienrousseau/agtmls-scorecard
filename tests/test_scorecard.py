@@ -22,7 +22,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from agtmls_scorecard.checks import documentation, maintainability, security  # noqa: E402  (sys.path is set above)
+import json  # noqa: E402  (sys.path is set above)
+
+from agtmls_scorecard import checks  # noqa: E402  (sys.path is set above)
+from agtmls_scorecard.checks import (  # noqa: E402  (sys.path is set above)
+    documentation,
+    dx,
+    interoperability,
+    maintainability,
+    observability,
+    performance,
+    security,
+)
 from agtmls_scorecard.model import CategoryReport, Report, Result, Status  # noqa: E402  (sys.path is set above)
 from agtmls_scorecard.repo import Repo  # noqa: E402  (sys.path is set above)
 
@@ -257,3 +268,238 @@ class RefinementTests(unittest.TestCase):
 
         self.write("c.py", 'pattern = re.compile(r"\\\\b(it|test)\\\\.(skip|todo)\\\\s*\\\\(")\n')
         self.assertIs(self.outcome(correctness.run(Repo(self.tmp)), "1.6").status, Status.PASS)
+
+
+class NewCategoryTests(unittest.TestCase):
+    """The four categories that were whole-category placeholders.
+
+    Each was 0.0 at zero coverage, which was honest and useless: a repository
+    could read 9.3/10 while nothing had ever asked whether it was fast,
+    diagnosable, scriptable or conformant.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = Path(__file__).resolve().parent / "_cat"
+        self.tmp.mkdir(exist_ok=True)
+        self.addCleanup(self._clean)
+
+    def _clean(self) -> None:
+        for path in sorted(self.tmp.rglob("*"), reverse=True):
+            path.unlink() if path.is_file() else path.rmdir()
+        self.tmp.rmdir()
+
+    def write(self, name: str, text: str) -> None:
+        path = self.tmp / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def result(self, results: list[Result], criterion: str) -> Result:
+        return next(r for r in results if r.criterion == criterion)
+
+    # -- performance -------------------------------------------------------
+
+    def test_a_benchmark_with_no_durations_is_not_a_benchmark(self) -> None:
+        # The exact state agtmls' own bench.py was in: it re-ran three
+        # validators and printed a quality score.
+        self.write("pyproject.toml", "[project]\nname='x'\n")
+        self.write("benchmarks/results/run.json", '{"suites": 3, "quality": 100}')
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.1")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_a_benchmark_with_durations_passes(self) -> None:
+        self.write("pyproject.toml", "[project]\nname='x'\n")
+        self.write("benchmarks/results/run.json", '{"workloads": {"a": {"p50_ms": 12.0}}}')
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.1")
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+
+    def test_a_baseline_nobody_compares_against_is_not_a_gate(self) -> None:
+        self.write("pyproject.toml", "[project]\nname='x'\n")
+        self.write("bench-baseline.json", '{"workloads": {"a": {"ratio_to_calibration": 1.0}}}')
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.2")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.write(".github/workflows/bench.yml", "jobs:\n  b:\n    steps:\n      - run: bench.py --check\n")
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.2")
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+
+    def test_cold_start_needs_a_declared_budget_and_declared_surfaces(self) -> None:
+        self.write("pyproject.toml", "[project]\nname='x'\n")
+        self.write("bench-baseline.json", '{"workloads": {"a": {"p50_ms": 30.0}}}')
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.10")
+        self.assertIs(outcome.status, Status.UNVERIFIED, outcome.detail)
+        self.write("bench-baseline.json", json.dumps({
+            "cold_start_budget_ms": 100,
+            "workloads": {"cli": {"p50_ms": 30.0, "interactive": True}},
+        }))
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.10")
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+        self.write("bench-baseline.json", json.dumps({
+            "cold_start_budget_ms": 100,
+            "workloads": {"cli": {"p50_ms": 430.0, "interactive": True}},
+        }))
+        outcome = self.result(performance.run(Repo(self.tmp)), "3.10")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    # -- developer experience ---------------------------------------------
+
+    def test_json_on_a_minority_of_the_surface_is_not_a_machine_interface(self) -> None:
+        # agtmls had --json on 10 of 35 subcommands. A presence check would
+        # have called that solved.
+        commands = "\n".join(f'sub.add_parser("cmd{i}")' for i in range(10))
+        self.write("cli.py", commands + '\np.add_argument("--json")\n')
+        outcome = self.result(dx.run(Repo(self.tmp)), "4.1")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_a_tally_is_not_an_error_missing_a_remedy(self) -> None:
+        # "FAIL: 3 issue(s)" is printed under errors that already explained
+        # themselves; demanding a remedy there makes every summary worse.
+        body = "\n".join(
+            f'print(f"FAIL: {{len(errors)}} configuration problem(s) found here {i}")'
+            for i in range(8)
+        )
+        self.write("m.py", body + '\nprint(f"FAIL: the widget is broken; run repair.py")\n' * 3)
+        outcome = self.result(dx.run(Repo(self.tmp)), "4.5")
+        self.assertIsNot(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_a_destructive_command_without_dry_run_still_fails(self) -> None:
+        self.write("cli.py", 'sub.add_parser("install")\nsub.add_parser("uninstall")\n')
+        outcome = self.result(dx.run(Repo(self.tmp)), "4.2")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    # -- observability -----------------------------------------------------
+
+    def test_a_library_is_not_failed_for_having_no_version_flag(self) -> None:
+        # Asking a WASM module for --version produces a finding nobody can act
+        # on, and a scorer that cries wolf gets switched off.
+        self.write("Cargo.toml", '[package]\nname = "lib"\n')
+        self.write("src/lib.rs", "pub fn f() {}\n")
+        outcome = self.result(observability.run(Repo(self.tmp)), "6.8")
+        self.assertIs(outcome.status, Status.NOT_APPLICABLE, outcome.detail)
+
+    def test_a_command_without_a_version_flag_still_fails(self) -> None:
+        self.write("Cargo.toml", '[package]\nname = "tool"\n')
+        self.write("src/main.rs", "fn main() { Command::new(\"go\"); }\n")
+        outcome = self.result(observability.run(Repo(self.tmp)), "6.8")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_no_telemetry_is_not_provable_by_absence(self) -> None:
+        self.write("pyproject.toml", "[project]\nname='x'\n")
+        self.write("m.py", "print('hello')\n")
+        outcome = self.result(observability.run(Repo(self.tmp)), "6.10")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.assertIn("control", outcome.detail)
+
+    # -- interoperability --------------------------------------------------
+
+    def test_git_plus_https_is_not_an_invented_scheme(self) -> None:
+        # A composed standard scheme, emitted by pip, SPDX and Cargo alike.
+        self.write("provenance.json", '{"uri": "git+https://example.com/x"}')
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.2")
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+
+    def test_an_undocumented_invented_scheme_is_still_caught(self) -> None:
+        self.write("m.py", 'URI = "agtmls://skill/handoff"\n')
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.2")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_prose_denying_a_deprecation_is_not_a_deprecation(self) -> None:
+        # SUPPORT.md said a release is "unsupported, not deprecated", and an
+        # earlier version of this check read that as a deprecation.
+        self.write("SUPPORT.md", "A release older than the newest patch is\n"
+                                 "unsupported, not deprecated.\n")
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.9")
+        self.assertIs(outcome.status, Status.NOT_APPLICABLE, outcome.detail)
+
+    def test_a_marked_deprecation_without_a_removal_still_fails(self) -> None:
+        self.write("schema.json", '{"field": {"deprecated": true}}')
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.9")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_an_emitted_format_nobody_validates_fails(self) -> None:
+        self.write("SBOM.spdx.json", '{"spdxVersion": "SPDX-2.3"}')
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.1")
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.write(".github/workflows/ci.yml", "steps:\n  - run: pyspdxtools -i SBOM.spdx.json\n")
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.1")
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+
+    def test_a_repo_emitting_no_standard_format_is_not_failed_for_it(self) -> None:
+        self.write("README.md", "# nothing here\n")
+        outcome = self.result(interoperability.run(Repo(self.tmp)), "8.1")
+        self.assertIs(outcome.status, Status.NOT_APPLICABLE, outcome.detail)
+
+
+class EveryCategoryIsImplementedTests(unittest.TestCase):
+    def test_no_category_is_a_placeholder(self) -> None:
+        """PENDING is the mechanism for declaring an unwritten checker.
+
+        It stays in the code so the next omission is counted rather than
+        silent, but it must be empty: a whole category scored 0.0 at zero
+        coverage is a category nobody is measuring.
+        """
+        self.assertEqual(checks.PENDING, [])
+        self.assertEqual(len(checks.IMPLEMENTED), 10)
+
+    #: category id -> its number in the rubric.
+    NUMBERS = {
+        "correctness": 1, "security": 2, "performance": 3, "dx": 4,
+        "documentation": 5, "observability": 6, "release": 7,
+        "interoperability": 8, "maintainability": 9, "governance": 10,
+    }
+
+    def test_every_rubric_criterion_is_decided(self) -> None:
+        """All ten of each category's criteria, one way or another.
+
+        Sub-criteria like 1.0 and 9.1b are fine; a *missing* one is not. This
+        caught criterion 2.10, whose checker had been written and never called
+        from run() -- so it was absent from every report this tool had ever
+        produced, which is the defect it exists to catch.
+        """
+        repo = Repo(Path(__file__).resolve().parent.parent)
+        for identifier, module in checks.IMPLEMENTED:
+            number = self.NUMBERS[identifier]
+            decided = {r.criterion for r in module.run(repo)}
+            missing = sorted(
+                c for c in (f"{number}.{i}" for i in range(1, 11)) if c not in decided
+            )
+            self.assertEqual(missing, [], f"{identifier} decides nothing for {missing}")
+
+
+class ScalingDeclarationTests(unittest.TestCase):
+    """Superlinear growth is a defect on a hot path and a fact everywhere else."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(__file__).resolve().parent / "_scale"
+        self.tmp.mkdir(exist_ok=True)
+        (self.tmp / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+        (self.tmp / "benchmarks").mkdir(exist_ok=True)
+        self.addCleanup(self._clean)
+
+    def _clean(self) -> None:
+        for path in sorted(self.tmp.rglob("*"), reverse=True):
+            path.unlink() if path.is_file() else path.rmdir()
+        self.tmp.rmdir()
+
+    def scaling(self, **extra) -> Result:
+        payload = {"growth": {"size": 10.0, "digest": 9.5, "pairwise": 73.4}, **extra}
+        (self.tmp / "benchmarks" / "scaling.json").write_text(
+            json.dumps(payload), encoding="utf-8")
+        results = performance.run(Repo(self.tmp))
+        return next(r for r in results if r.criterion == "3.5")
+
+    def test_undeclared_superlinear_growth_fails(self) -> None:
+        outcome = self.scaling()
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.assertIn("pairwise", outcome.detail)
+
+    def test_a_path_declared_cold_is_not_a_defect(self) -> None:
+        outcome = self.scaling(cold_paths=["pairwise"])
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
+
+    def test_declaring_a_path_cold_does_not_excuse_the_others(self) -> None:
+        # The escape hatch must not be a blanket one.
+        outcome = self.scaling(
+            growth={"size": 10.0, "digest": 95.0, "pairwise": 73.4},
+            cold_paths=["pairwise"],
+        )
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.assertIn("digest", outcome.detail)

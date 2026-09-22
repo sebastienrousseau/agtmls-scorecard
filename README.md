@@ -64,9 +64,12 @@ See [ADR 0001](docs/adr/0001-unverified-is-not-a-pass.md).
 
 ## What it does not do
 
-- **It does not run your tests, benchmarks or builds.** Four of the ten
-  categories have no checker for exactly that reason, and they are declared as
-  placeholders rather than omitted, so they drag coverage down honestly.
+- **It does not run your tests, benchmarks or builds.** It reads what they
+  left behind. A benchmark is judged by whether its committed record contains
+  durations, not by whether a `benches/` directory exists; a format is judged
+  by whether CI validates it, not by whether the file is present. What needs
+  execution — `--help` on every subcommand, MCP Inspector, a container per
+  install path — stays `unverified` with the reason attached.
 - **It does not replace review.** Criterion 5.9 — *no README claim without an
   enforcing check* — is permanently `unverified`, because mapping prose to
   checks is the judgement this tool exists to inform, not to make.

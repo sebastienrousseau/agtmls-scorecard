@@ -191,4 +191,8 @@ def run(repo: Repo) -> list[Result]:
                "requires reading the parser; no static check distinguishes a cap from its absence"),
         Result("2.9", "Analyzer conformance corpus green, including evasions", Status.UNVERIFIED,
                "would mean running another repository's test suite; the corpus runner does this"),
+        # Written, and until now never called: criterion 2.10 was absent from
+        # every report this tool produced, which is the defect it exists to
+        # catch, in itself.
+        _security_policy(repo),
     ]
