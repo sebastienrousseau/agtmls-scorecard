@@ -140,6 +140,24 @@ def _a2a_card(repo: Repo) -> Result:
         data = json.loads(cards[0].read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return Result("8.4", title, Status.FAIL, f"{cards[0].name} is not valid JSON")
+
+    # A document is judged against the standard it claims, not the standard
+    # its filename suggests. A2A's `url` is a live service endpoint, so a
+    # project with no such endpoint cannot publish a truthful A2A card -- and
+    # forcing one would mean inventing the URL, which is worse than not
+    # claiming the standard at all. Declaring `kind` or `protocolVersion` is
+    # how a document says which it is.
+    claims_a2a = "protocolVersion" in data or "a2a" in str(data.get("kind", "")).lower()
+    declared_kind = data.get("kind")
+    if not claims_a2a and declared_kind:
+        return Result("8.4", title, Status.NOT_APPLICABLE,
+                      f"{cards[0].name} declares kind {declared_kind!r}, not an A2A card")
+    if not claims_a2a:
+        return Result("8.4", title, Status.FAIL,
+                      f"{cards[0].name} claims no standard: it is named like an A2A "
+                      "card and carries no protocolVersion or kind, so no consumer "
+                      "can tell what it is")
+
     missing = [k for k in A2A_REQUIRED if k not in data]
     if missing:
         return Result("8.4", title, Status.FAIL,

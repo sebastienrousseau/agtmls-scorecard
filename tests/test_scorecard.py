@@ -551,3 +551,50 @@ class VersionCarrierTests(unittest.TestCase):
     def test_a_changelog_listing_old_versions_is_not_a_carrier(self) -> None:
         self.write("CHANGELOG.md", "## 1.2.3 - 2026-01-01\n## 1.2.2 - 2025-12-01\n")
         self.assertIs(self.outcome().status, Status.PASS, self.outcome().detail)
+
+
+class ClaimedStandardTests(unittest.TestCase):
+    """A document is judged against the standard it claims.
+
+    A2A's `url` is a live service endpoint. A project without one cannot
+    publish a truthful A2A card, and a rubric that demands one is a rubric
+    that rewards inventing the URL.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = Path(__file__).resolve().parent / "_card"
+        self.tmp.mkdir(exist_ok=True)
+        self.addCleanup(self._clean)
+
+    def _clean(self) -> None:
+        for path in sorted(self.tmp.rglob("*"), reverse=True):
+            path.unlink() if path.is_file() else path.rmdir()
+        self.tmp.rmdir()
+
+    def card(self, payload: dict) -> Result:
+        (self.tmp / "agent-card.json").write_text(json.dumps(payload), encoding="utf-8")
+        return next(r for r in interoperability.run(Repo(self.tmp)) if r.criterion == "8.4")
+
+    def test_a_card_claiming_a2a_is_held_to_a2a(self) -> None:
+        outcome = self.card({"protocolVersion": "0.3.0", "name": "x"})
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+        self.assertIn("url", outcome.detail)
+
+    def test_a_card_declaring_another_kind_is_not_held_to_a2a(self) -> None:
+        outcome = self.card({"kind": "registry-card", "name": "x"})
+        self.assertIs(outcome.status, Status.NOT_APPLICABLE, outcome.detail)
+
+    def test_a_card_claiming_nothing_fails(self) -> None:
+        # The loophole closed: silence is not an exemption.
+        outcome = self.card({"name": "x", "capabilities": ["a", "b"]})
+        self.assertIs(outcome.status, Status.FAIL, outcome.detail)
+
+    def test_a_complete_a2a_card_passes(self) -> None:
+        outcome = self.card({
+            "protocolVersion": "0.3.0", "name": "x", "description": "d",
+            "url": "https://example.com/a2a", "version": "1.0.0",
+            "capabilities": {"streaming": False},
+            "defaultInputModes": ["text/plain"], "defaultOutputModes": ["text/plain"],
+            "provider": {"organization": "o", "url": "https://example.com"},
+        })
+        self.assertIs(outcome.status, Status.PASS, outcome.detail)
