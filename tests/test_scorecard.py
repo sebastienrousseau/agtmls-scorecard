@@ -32,6 +32,7 @@ from agtmls_scorecard.checks import (  # noqa: E402  (sys.path is set above)
     maintainability,
     observability,
     performance,
+    release,
     security,
 )
 from agtmls_scorecard.model import CategoryReport, Report, Result, Status  # noqa: E402  (sys.path is set above)
@@ -503,3 +504,50 @@ class ScalingDeclarationTests(unittest.TestCase):
         )
         self.assertIs(outcome.status, Status.FAIL, outcome.detail)
         self.assertIn("digest", outcome.detail)
+
+
+class VersionCarrierTests(unittest.TestCase):
+    """A version in many authored files is a version that disagrees with itself.
+
+    But a per-provider manifest restates it because a generator put it there,
+    and a changelog restates every version it ever shipped. Counting either
+    asks a project to fix something regenerating already fixes.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = Path(__file__).resolve().parent / "_ver"
+        self.tmp.mkdir(exist_ok=True)
+        (self.tmp / "pyproject.toml").write_text(
+            '[project]\nname = "x"\nversion = "1.2.3"\n', encoding="utf-8")
+        self.addCleanup(self._clean)
+
+    def _clean(self) -> None:
+        for path in sorted(self.tmp.rglob("*"), reverse=True):
+            path.unlink() if path.is_file() else path.rmdir()
+        self.tmp.rmdir()
+
+    def write(self, name: str, text: str) -> None:
+        path = self.tmp / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def outcome(self) -> Result:
+        return next(r for r in release.run(Repo(self.tmp)) if r.criterion == "7.2")
+
+    def test_a_version_hardcoded_across_authored_files_still_fails(self) -> None:
+        for i in range(8):
+            self.write(f"pkg{i}/meta.json", '{"version": "1.2.3"}')
+        self.assertIs(self.outcome().status, Status.FAIL, self.outcome().detail)
+
+    def test_files_a_generator_writes_are_not_authored_carriers(self) -> None:
+        for i in range(8):
+            self.write(f"pkg{i}/meta.json", '{"version": "1.2.3"}')
+        # A script in the repository names each path, so regenerating fixes
+        # any drift and they cannot disagree independently.
+        named = "\n".join(f'TARGETS = "pkg{i}/meta.json"' for i in range(8))
+        self.write("generate.py", named + "\n")
+        self.assertIs(self.outcome().status, Status.PASS, self.outcome().detail)
+
+    def test_a_changelog_listing_old_versions_is_not_a_carrier(self) -> None:
+        self.write("CHANGELOG.md", "## 1.2.3 - 2026-01-01\n## 1.2.2 - 2025-12-01\n")
+        self.assertIs(self.outcome().status, Status.PASS, self.outcome().detail)
