@@ -8,6 +8,14 @@
   rubric could actually be evaluated.
 </p>
 
+<p align="center">
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/agtmls-scorecard/ci.yml?style=for-the-badge&logo=github" alt="Build" height="28" /></a>
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard#readme"><img src="https://img.shields.io/badge/docs-reference-blue.svg?style=for-the-badge&labelColor=555555&logo=markdown" alt="Docs" height="28" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/sebastienrousseau/agtmls-scorecard"><img src="https://img.shields.io/ossf-scorecard/github.com/sebastienrousseau/agtmls-scorecard?style=for-the-badge&label=OpenSSF%20Scorecard&logo=openssf" alt="OpenSSF Scorecard" height="28" /></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg?style=for-the-badge" alt="License: Apache-2.0 OR MIT" height="28" /></a>
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-93450a.svg?style=for-the-badge&logo=python" alt="Python 3.10+" height="28" /></a>
+</p>
+
 ---
 
 ## Why this exists
@@ -64,9 +72,12 @@ See [ADR 0001](docs/adr/0001-unverified-is-not-a-pass.md).
 
 ## What it does not do
 
-- **It does not run your tests, benchmarks or builds.** Four of the ten
-  categories have no checker for exactly that reason, and they are declared as
-  placeholders rather than omitted, so they drag coverage down honestly.
+- **It does not run your tests, benchmarks or builds.** It reads what they
+  left behind. A benchmark is judged by whether its committed record contains
+  durations, not by whether a `benches/` directory exists; a format is judged
+  by whether CI validates it, not by whether the file is present. What needs
+  execution — `--help` on every subcommand, MCP Inspector, a container per
+  install path — stays `unverified` with the reason attached.
 - **It does not replace review.** Criterion 5.9 — *no README claim without an
   enforcing check* — is permanently `unverified`, because mapping prose to
   checks is the judgement this tool exists to inform, not to make.

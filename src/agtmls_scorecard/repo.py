@@ -94,6 +94,64 @@ class Repo:
             return "node"
         return "docs"
 
+    @functools.cached_property
+    def has_cli(self) -> bool:
+        """Does this repository ship something a person types at a prompt?
+
+        Half of category 4 and category 6 only mean anything for a command.
+        Asking a WASM module for `--version`, or a GitHub Action for a
+        `doctor` subcommand, produces findings nobody can act on -- and a
+        scorer that cries wolf is one people switch off, which scores nothing
+        while looking like it scores everything.
+        """
+        # A Cargo workspace keeps its binary in a member crate, so reading only
+        # the root manifest reported agtmls-core -- which ships agtmls-cli --
+        # as having no command at all.
+        if any(
+            p.name == "main.rs" or (p.parent.name == "bin" and p.suffix == ".rs")
+            for p in self.files
+        ):
+            return True
+        if any("[[bin]]" in (p.read_text(encoding="utf-8", errors="replace"))
+               for p in self.files if p.name == "Cargo.toml"):
+            return True
+        if "[project.scripts]" in (self.read("pyproject.toml") or ""):
+            return True
+        package = self.read("package.json") or ""
+        if re.search(r'"bin"\s*:', package):
+            return True
+        for path in self.by_suffix(".py", ".rs", ".js", ".ts"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if re.search(r"add_parser\(|Command::new\(|\.command\(", text):
+                return True
+        return False
+
+    @functools.cached_property
+    def emits_json(self) -> bool:
+        """Does anything here produce JSON for another program to read?"""
+        if "serde_json" in (self.read("Cargo.toml") or ""):
+            return True
+        for path in self.by_suffix(".py", ".rs", ".js", ".ts"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if re.search(r"json\.dumps|JSON\.stringify|serde_json::|to_string_pretty|json!\(", text):
+                return True
+        return False
+
+    @functools.cached_property
+    def runs_checks(self) -> bool:
+        """Does this repository run a suite of independent checks of its own?
+
+        Criteria about collecting every failure, timing each one and keeping a
+        trend are about a gate. A library has none of those things and is not
+        worse for it.
+        """
+        if self.exists("checks.json", "Makefile", "justfile", "tox.ini", "noxfile.py"):
+            return True
+        return any(
+            re.search(r"run[_-]all[_-]checks|validate-|conformance|check[_-]suite", p.name)
+            for p in self.files
+        )
+
     def git(self, *args: str) -> str:
         try:
             proc = subprocess.run(

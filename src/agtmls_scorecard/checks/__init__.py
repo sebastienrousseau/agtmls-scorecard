@@ -2,42 +2,54 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 """The ten categories of the rubric.
 
-Six are implemented. The other four — performance, developer experience,
-observability and interoperability — are declared here as whole-category
-placeholders rather than omitted, because a rubric that silently drops the
-categories nobody wrote a checker for is how 10/10 stops meaning anything.
-They count against coverage until someone implements them.
+All ten are implemented. Four of them -- performance, developer experience,
+observability and interoperability -- were whole-category placeholders until
+now, which meant the tool reported 0.0 at zero coverage for 40 of the 100
+criteria. That was honest, and it was also the reason a repository could read
+9.3/10 while nothing had ever checked whether it was fast, diagnosable,
+scriptable or conformant.
+
+Implementing them is expected to *lower* published scores, because criteria
+that were invisible become criteria that can fail. A number that only ever
+moves up is not measuring anything.
+
+PENDING is kept, empty, on purpose: it is the mechanism for declaring a
+category nobody has written a checker for, and deleting it would make the next
+omission silent instead of counted.
 """
 
 from __future__ import annotations
 
 from ..model import CategoryReport, Result, Status
 from ..repo import Repo
-from . import correctness, documentation, governance, maintainability, release, security
+from . import (
+    correctness,
+    documentation,
+    dx,
+    governance,
+    interoperability,
+    maintainability,
+    observability,
+    performance,
+    release,
+    security,
+)
 
 IMPLEMENTED = [
     ("correctness", correctness),
     ("security", security),
+    ("performance", performance),
+    ("dx", dx),
     ("documentation", documentation),
+    ("observability", observability),
     ("release", release),
+    ("interoperability", interoperability),
     ("maintainability", maintainability),
     ("governance", governance),
 ]
 
 #: (id, title, why no checker exists yet)
-PENDING = [
-    ("performance", "Performance & Efficiency",
-     "needs a benchmark harness and a committed baseline to compare against; "
-     "presence of a benches/ directory proves nothing about what it measures"),
-    ("dx", "API & Developer Experience",
-     "needs the CLI surface enumerated and each command invoked; the pattern exists "
-     "in agtmls' own dispatch test but is not generalised here"),
-    ("observability", "Observability & Diagnostics",
-     "needs a running process to inspect for structured output and exit codes"),
-    ("interoperability", "Interoperability & Standards Conformance",
-     "needs each emitted format validated against its upstream schema, which means "
-     "network access and per-format validators"),
-]
+PENDING: list[tuple[str, str, str]] = []
 
 
 def evaluate(repo: Repo) -> list[CategoryReport]:
