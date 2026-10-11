@@ -17,6 +17,7 @@ static read sees only the inputs someone thought of.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from ..model import Result, Status
 from ..repo import Repo
@@ -169,9 +170,10 @@ def _trends(repo: Repo) -> Result:
 
 def _telemetry(repo: Repo) -> Result:
     title = "No telemetry, and it is verifiable"
+    self_path = Path(__file__).resolve()
     offenders = [
         str(p.relative_to(repo.root)) for p in _sources(repo)
-        if TELEMETRY.search(p.read_text(encoding="utf-8", errors="replace"))
+        if p.resolve() != self_path and TELEMETRY.search(p.read_text(encoding="utf-8", errors="replace"))
     ]
     if offenders:
         return Result("6.10", title, Status.FAIL,
