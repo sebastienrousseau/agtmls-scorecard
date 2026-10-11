@@ -8,6 +8,14 @@
   rubric could actually be evaluated.
 </p>
 
+<p align="center">
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard/actions"><img src="https://github.com/sebastienrousseau/agtmls-scorecard/workflows/ci/badge.svg?style=for-the-badge&logo=github" alt="Build" /></a>
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard#readme"><img src="https://img.shields.io/badge/docs-reference-blue.svg?style=for-the-badge&labelColor=555555&logo=markdown" alt="Docs" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/sebastienrousseau/agtmls-scorecard"><img src="https://img.shields.io/ossf-scorecard/github.com/sebastienrousseau/agtmls-scorecard?style=for-the-badge&label=OpenSSF%20Scorecard&logo=openssf" alt="OpenSSF Scorecard" /></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg?style=for-the-badge" alt="License: Apache-2.0 OR MIT" /></a>
+  <a href="https://github.com/sebastienrousseau/agtmls-scorecard/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-93450a.svg?style=for-the-badge&logo=python" alt="Python 3.10+" /></a>
+</p>
+
 ---
 
 ## Why this exists
