@@ -3,7 +3,7 @@
 
 # Changelog
 
-## [0.0.3] - Unreleased
+## [0.0.3] - 2026-11-15
 
 ### Changed
 
