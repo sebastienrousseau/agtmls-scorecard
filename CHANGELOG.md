@@ -3,6 +3,12 @@
 
 # Changelog
 
+## [0.0.35] - 2026-11-17
+
+**In lockstep with the AgtMLS family.** Every member of the family now
+releases at one version, so agtmls-scorecard moves from 0.0.3 to 0.0.35.
+No behaviour change.
+
 ## [0.0.3] - 2026-11-15
 
 ### Changed
